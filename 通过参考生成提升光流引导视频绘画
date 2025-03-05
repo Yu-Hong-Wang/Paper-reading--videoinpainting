@@ -1,104 +1,77 @@
-# RGVI (Reference-Guided Video Inpainting) 《Elevating Flow-Guided Video Inpainting with Reference Generation》
+```markdown
+# RGVI (Reference-Guided Video Inpainting): Elevating Flow-Guided Video Inpainting with Reference Generation
 
-## 研究背景
+## Research Background
 
-视频修复：视频修复的时间一致性、修复质量和实用性始终是追寻的目标。本文的目标是克服基于光流方法的局限性，避免重复采样带来的伪影，要求保持亚像素精度。本文创建了一个数据集 HQVI，但本文不作讲解。
+Video inpainting: Temporal consistency, inpainting quality, and practicality are always the goals pursued in video inpainting. The goal of this paper is to overcome the limitations of optical flow-based methods, avoid artifacts caused by repeated sampling, and maintain sub-pixel accuracy. This paper creates a dataset-HQVI, which will not be explained here.
 
-## RGVI 解决方法
+## RGVI Solution
 
-### 基础知识
+### Basic Knowledge
 
-- **基于光流的算法**：描述了像素从一个帧到另一个帧的移动方向和距离。
-- **逐像素光流追踪算法**：对于每个缺失像素，根据光流场追踪其在相邻帧中的对应像素。
-- **递归像素变形算法**：递归地应用光流场进行像素变形（多次应用光流场逐步地将像素从源帧变形到目标帧）。
-- **网格变形**：通过对图像网格进行变形来实现像素的重新排列，主要用于将源帧的像素映射到目标帧。
+Optical flow-based algorithms: Describe the direction and distance of pixel movement from one frame to another.
 
----
+Pixel-wise optical flow tracking algorithm: For each missing pixel, track its corresponding pixel in adjacent frames based on the optical flow field.
 
-### 内部像素传播
+Recursive pixel warping algorithm: Recursively apply the optical flow field for pixel warping (gradually warping pixels from the source frame to the target frame by applying the optical flow field multiple times).
 
-#### 一次性像素拉取方法（One-Shot Pixel Pulling）
+Mesh deformation: Achieve pixel rearrangement by deforming the image grid, mainly used to map pixels from the source frame to the target frame.
 
-**目的**：避免积累误差，提高修复精度，保持亚像素精度，减少纹理模糊。
+### **Internal Pixel Propagation**
 
-**方法**：
-1. 计算视频帧之间的光流场。
-2. 对于目标帧中的每个缺失像素，根据光流场**追踪**其在源帧中的对应像素（具体分析追踪方法：对于目标帧的每个缺失元素，通过光流场的链式传播（chaining）直接计算其在源帧中的全局对应位置）。
-3. 将源帧的像素颜色值一次性拉取到目标帧（与之对比的是：递归像素变形算法反复采样，增加误差）。
-4. 进行传播验证，即通过双向像素收集和验证协议，检测传播不可靠的区域，确保修复质量。
+**One-shot pixel pulling method**
 
-#### 双向收集与验证
+Purpose: Avoid error accumulation, improve inpainting accuracy, maintain sub-pixel accuracy, and reduce texture blurring.
 
-**目的**：保证传播的可靠性，从目标帧开始，分别向前和向后传递，以获得视频的全局感知。
+Method: First, calculate the optical flow field between video frames. For each missing pixel in the target frame, track its corresponding pixel in the source frame based on the optical flow field (specifically, analyze the tracking method: for each missing element in the target frame, directly calculate its global corresponding position in the source frame through the chaining of the optical flow field), and pull the pixel color value from the source frame to the target frame in one shot (in contrast, the recursive pixel warping algorithm repeatedly samples, increasing errors). Finally, propagation verification is required, i.e., through a bidirectional pixel collection and verification protocol, detect unreliable propagation regions to ensure inpainting quality.
 
-**方法**：
-1. 优先从最近的帧中收集像素颜色值。
-2. 在每次传递中，收集目标帧中缺失区域的像素颜色值。
-3. 在循环通过不同的源帧时，确保以一次性方式拉取像素颜色值，消除重复采样过程的需要。
-4. 在前向和后向方向上找到对应的像素后，实施验证协议。
-   - 采用基于颜色值差异的简单验证方法。
-   - 计算归一化的 3 通道颜色值之间的 L1 距离，范围从 0 到 1。
-   - 如果从前向和后向拉取的颜色值差异低于阈值，将平均值分配给目标像素位置。
-   - 如果差异超过阈值，将这些目标像素标记为不可靠，并在后续步骤中使传播无效。
-   - 阈值值经验性地设置为 1，不同值之间的变化最小。
+**Bidirectional Collection and Verification**
 
----
+Purpose: Ensure the reliability of propagation, starting from the target frame, propagate forward and backward respectively to obtain global perception of the video.
 
-### 参考生成与传播
+Method: Prioritize collecting pixel color values from the nearest frames. Therefore, in each pass, we collect pixel color values for the missing regions in the target frame. Importantly, when looping through different source frames, we ensure that pixel color values are pulled in a one-shot manner, eliminating the need for repeated sampling. Once we find corresponding pixels in the forward and backward directions, we implement a verification protocol. Our method adopts a simple verification method based on color value differences. Specifically, we calculate the L1 distance between normalized 3-channel color values, ranging from 0 to 1. If the difference between the forward and backward pulled color values is below the threshold, we assign the average value to the target pixel position. Conversely, if there is a divergence (i.e., the difference exceeds the threshold), we mark these target pixels as unreliable and invalidate the propagation in subsequent steps. Note that the threshold is empirically set to 1, with minimal variation between different values.
 
-#### 关键帧选择
+### **Reference Generation and Propagation**
 
-**目的**：为了减轻帧之间的内容冲突，采用一种策略，即新内容仅针对单个关键帧生成。因此选取关键帧至关重要，需要定量描述一个帧的影响力。
+**Key Frame Selection**:
 
-**方法**：根据参考传播后的影响确定关键帧（也可以根据需要确定多个关键帧）。
+Purpose: To mitigate content conflicts between frames, we adopt a strategy where new content is generated only for a single key frame. Therefore, selecting key frames is crucial, and we need to quantitatively describe the influence of a frame.
 
-#### 参考生成
+Method: We determine key frames based on the influence after reference propagation (multiple key frames can also be determined as needed).
 
-选择关键帧后，使用大型生成模型（文中使用 Stable Diffusion）生成高质量的参考内容。提出两种模式：
-1. **移除模式**：目标是生成与原始图像（如背景）无缝融合的最合理内容。为了避免生成不需要的对象或图案，使用“空背景，高分辨率”作为移除模式的文本提示。
-2. **生成模式**：使用缺失区域附近的裁剪图像作为输入图像，从而排除已知像素的外部指导。这种方法旨在仅基于局部上下文促进内容生成。
+**Reference Generation**:
 
-#### 参考传播
+After selecting key frames, we use a large generative model (Stable Diffusion in this paper) to generate high-quality reference content. Two modes are proposed here: removal mode and generation mode.
 
-关键帧中生成的像素通过预计算的光流和网格变形操作传播到其余帧。
+In removal mode, the goal is to generate the most reasonable content that seamlessly blends with the original image (e.g., background). To avoid generating unwanted objects or patterns, we use "empty background, high resolution" as the text prompt for removal mode. In contrast, in generation mode, we use cropped images near the missing region as input images, thereby excluding external guidance from known pixels. This method aims to promote content generation based solely on local context.
 
----
+**Reference Propagation**:
 
-### 逐帧完成
+The generated pixels in the key frame are then propagated to the remaining frames using precomputed optical flow through mesh deformation operations.
 
-由于一些内部传播的像素在传播验证步骤中被标记为不可靠，这些不可靠的像素无法仅通过帧间知识充分填充，因此需要逐帧完成。
+### **Frame-by-Frame Completion**
 
-**方法**：采用一个轻量级的卷积网络，结构为一个简单的编码器-解码器架构，单独处理每帧的缺失区域。
+Since some internally propagated pixels are marked as unreliable in the propagation verification step. These unreliable pixels cannot be adequately filled by inter-frame knowledge alone, so frame-by-frame completion is required.
 
----
+Here, we adopt a lightweight convolutional network, structured as a simple encoder-decoder architecture, to process the missing regions of each frame separately.
 
-### 处理遮挡的附加掩码
+### **Additional Masks for Handling Occlusions**
 
-**目的**：基于光流的视频修复方法通常容易受到遮挡的影响。理想情况下，光流应与背景内容一致地完成。然而，遮挡对象的运动可能会显著破坏光流完成，导致关键的传播错误。
+Purpose: Optical flow-based video inpainting methods are generally susceptible to occlusions. Ideally, optical flow should be completed consistently with the background content. However, the motion of occluding objects may significantly disrupt optical flow completion, leading to critical propagation errors.
 
-**方法**：
-1. 除了提供要移除的目标对象的掩码（负掩码）外，还要提供给遮挡目标的对象的掩码（正掩码）。
-2. 在推理之前，将这些掩码组合成一个临时目标掩码。
-3. 推理后，将正掩码的原始内容覆盖到输出图像上，确保仅从视频中移除目标对象。
+Method: In addition to providing the mask of the target object to be removed (negative mask), also provide the mask of the object occluding the target (positive mask). Before inference, we combine these masks into a temporary target mask. After inference, we overlay the original content of the positive mask onto the output image, ensuring that only the target object is removed from the video.
 
-**负掩码**：表示要移除的目标对象。在视频修复任务中，负掩码用于标记需要修复的区域。
+**Negative Mask**: Represents the target object to be removed. In video inpainting tasks, the negative mask is used to mark the regions that need to be inpainted.
 
-**正掩码**：表示遮挡目标的对象。正掩码用于标记遮挡目标的区域，确保在修复过程中保留遮挡目标的内容。
+**Positive Mask**: Represents the object occluding the target. The positive mask is used to mark the regions occluding the target, ensuring that the content of the occluding object is retained during the inpainting process.
 
----
+## Problems to be Solved
 
-## 待解决的问题
+1. Advanced optical flow algorithms: Utilize deep learning for estimation.
 
-1. **先进的光流算法**：利用深度学习进行估计。
-2. **多帧光流**：研究多帧光流的应用。
-3. **复杂运动建模**：改进复杂运动场景的建模方法。
-4. **动态遮挡处理**：代替正掩码，研究动态遮挡处理方法。
+2. Multi-frame optical flow.
 
----
+3. Complex motion modeling.
 
-### 修改说明
-1. **公式和代码**：GitHub 不支持 LaTeX 渲染，因此将公式和代码转换为代码块形式（用反引号包裹）。
-2. **下标**：使用 HTML 的 `<sub>` 标签实现下标（如 `L1`）。
-3. **文本优化**：调整了部分表述，使其更清晰易懂。
-
-如果还有其他需要调整的地方，请告诉我！ 😊
+4. Dynamic occlusion handling instead of positive masks.
+```
